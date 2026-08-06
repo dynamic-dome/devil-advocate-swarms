@@ -11,7 +11,7 @@
 # Usage:
 #   ./orchestrator.sh --target ~/projects/myapp --goal "Security audit"
 #   ./orchestrator.sh --target . --goal "Code quality review" --scanners 3
-#   ./orchestrator.sh --target . --goal "Architecture review" --no-fix
+#   ./orchestrator.sh --target . --goal "Architecture review" --fix --approve-fixes
 
 set -euo pipefail
 
@@ -27,7 +27,8 @@ TARGET_DIR=""
 GOAL=""
 NUM_SCANNERS=3
 MAX_DEBATE_ROUNDS=3
-SKIP_FIX=false
+FIX_MODE=false
+FIX_APPROVED=false
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # --- Helper: extract JSON object from CLI output ---
@@ -94,18 +95,36 @@ run_scanner_json() {
     local prompt="$2"
     local result
 
-    # Try Codex first (cheapest)
-    result=$( (cd "$work_dir" && codex exec --sandbox workspace-read "$prompt") 2>&1 | extract_json ) && {
+    # Try Codex first with an explicit read-only sandbox and no approval probing.
+    result=$( (cd "$work_dir" && printf '%s' "$prompt" | codex exec --sandbox read-only -c 'approval_policy="never"' -) 2>&1 | extract_json ) && {
         echo "$result"
         return 0
     }
 
-    # Fallback: Sonnet running IN the target directory (so it can read files)
-    echo "    (Codex failed, falling back to Sonnet in $work_dir)" >&2
+    # Fallback only when this Claude CLI exposes all controls needed to make the
+    # non-interactive scanner read-only and to disable inherited hooks.
+    local claude_help
+    if ! claude_help=$(claude --help 2>&1) ||
+       ! grep -qF -- "--permission-mode" <<< "$claude_help" ||
+       ! grep -qF -- "--tools" <<< "$claude_help" ||
+       ! grep -qF -- "--settings" <<< "$claude_help" ||
+       ! grep -qF -- "--setting-sources" <<< "$claude_help" ||
+       ! grep -qF -- "--strict-mcp-config" <<< "$claude_help"; then
+        echo "    ERROR: Codex failed and Claude CLI cannot guarantee read-only execution; scanner aborted." >&2
+        return 1
+    fi
+
+    echo "    (Codex failed, falling back to verified read-only Sonnet in $work_dir)" >&2
     local tmpfile
     tmpfile=$(mktemp)
     printf '%s' "$prompt" > "$tmpfile"
-    (cd "$work_dir" && claude -p --model claude-sonnet-4-6 --output-format json --dangerously-skip-permissions < "$tmpfile") 2>/dev/null | extract_json
+    (cd "$work_dir" && claude -p --model claude-sonnet-4-6 --output-format json \
+        --permission-mode plan \
+        --tools "Read,Glob,Grep" \
+        --setting-sources "" \
+        --strict-mcp-config \
+        --settings '{"disableAllHooks":true}' \
+        < "$tmpfile") 2>/dev/null | extract_json
     local rc=$?
     rm -f "$tmpfile"
     return $rc
@@ -118,7 +137,9 @@ while [[ $# -gt 0 ]]; do
         --goal)     GOAL="$2"; shift 2 ;;
         --scanners) NUM_SCANNERS="$2"; shift 2 ;;
         --rounds)   MAX_DEBATE_ROUNDS="$2"; shift 2 ;;
-        --no-fix)   SKIP_FIX=true; shift ;;
+        --fix)      FIX_MODE=true; shift ;;
+        --approve-fixes) FIX_APPROVED=true; shift ;;
+        --no-fix)   FIX_MODE=false; shift ;;
         -h|--help)
             cat <<'USAGE'
 Usage: orchestrator.sh --target <dir> --goal "description"
@@ -128,12 +149,14 @@ Options:
   --goal <text>      What to analyze/review (required)
   --scanners <n>     Number of scanner agents (default: 3, max: 5)
   --rounds <n>       Max debate rounds (default: 3)
-  --no-fix           Skip fix phase, output consensus only
+  --fix              Enable the fix phase (default: scan/review only)
+  --approve-fixes    Explicitly approve write-capable fixer execution; requires --fix
+  --no-fix           Explicitly retain scan/review-only mode (legacy-compatible)
 
 Examples:
   ./orchestrator.sh --target ~/myapp --goal "Security audit"
   ./orchestrator.sh --target . --goal "Find performance bottlenecks" --scanners 2
-  ./orchestrator.sh --target . --goal "Architecture review" --no-fix
+  ./orchestrator.sh --target . --goal "Apply approved fixes" --fix --approve-fixes
 USAGE
             exit 0 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
@@ -142,6 +165,11 @@ done
 
 if [[ -z "$TARGET_DIR" || -z "$GOAL" ]]; then
     echo "ERROR: --target and --goal are required. Use --help for usage."
+    exit 1
+fi
+
+if [[ "$FIX_APPROVED" == true && "$FIX_MODE" != true ]]; then
+    echo "ERROR: --approve-fixes requires --fix."
     exit 1
 fi
 
@@ -412,8 +440,10 @@ echo ""
 # ==================================================================
 # PHASE 5: FIX — Codex applies fixes for accepted findings
 # ==================================================================
-if [[ "$SKIP_FIX" == true ]]; then
-    echo "[Phase 5/5] Skipped (--no-fix)"
+if [[ "$FIX_MODE" != true ]]; then
+    echo "[Phase 5/5] Skipped (scan/review-only default)"
+elif [[ "$FIX_APPROVED" != true ]]; then
+    echo "[Phase 5/5] Skipped (explicit approval required: rerun with --fix --approve-fixes)"
 elif [[ "$ACCEPTED" -eq 0 ]]; then
     echo "[Phase 5/5] No accepted findings to fix."
 else
@@ -485,7 +515,7 @@ echo "   Assignments:  .agent-memory/scratch/scan-assignments.json"
 echo "   Findings:     .agent-memory/scratch/all-findings.json"
 echo "   Debates:      .agent-memory/debates/round-*.json"
 echo "   Consensus:    .agent-memory/consensus/result.json"
-[[ "$SKIP_FIX" != true && "$ACCEPTED" -gt 0 ]] && \
+[[ "$FIX_MODE" == true && "$FIX_APPROVED" == true && "$ACCEPTED" -gt 0 ]] && \
 echo "   Fixes:        .agent-memory/consensus/fix-*.json"
 echo ""
 echo " Review consensus:  cat .agent-memory/consensus/result.json | jq ."
