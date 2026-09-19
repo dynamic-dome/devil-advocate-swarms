@@ -58,8 +58,6 @@ devil-advocate-swarms/
 ├── skills/
 │   ├── swarm-orchestrator/
 │   │   └── SKILL.md         # /swarm Skill (Agent-Tool-Modus)
-│   └── research-pipeline/
-│       └── SKILL.md         # Redirect-Alias auf agentic-os:research-pipeline
 └── .agent-memory/           # erst beim Lauf gefuellt
     ├── scratch/             # Geteiltes Scratch Pad
     ├── consensus/           # Konsens-Ergebnisse

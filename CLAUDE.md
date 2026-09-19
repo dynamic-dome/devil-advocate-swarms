@@ -37,7 +37,7 @@ Adversarielle Agent-Teams fuer Claude Code. Statt linearer Sub-Agenten wird ein 
 - **Script-Modus:** `scripts/orchestrator.sh` haelt seine Prompts INLINE im Bash (DECOMPOSE_PROMPT, SCANNER_PROMPT, ADVOCATE_PROMPT, FIXER_PROMPT). Es liest NICHT aus `agents/`-Files. Trade-off: Cross-Provider-Modelle (Codex Scanner + Sonnet Advocates + Opus Synthesizer) lassen sich so direkt orchestrieren.
 - **Was es NICHT mehr gibt:** ein paralleles `prompts/`-Verzeichnis. Es wurde 2026-04-30 entfernt, weil es weder vom `Agent`-Tool-Modus (der nutzt `agents/`) noch vom Script-Modus (der inlined) konsumiert wurde — toter Code.
 - **Slash-Command:** `commands/swarm.md` → `/swarm`
-- **Skills:** `skills/swarm-orchestrator/SKILL.md` (Hauptzugang ueber Skill-Tool), `skills/research-pipeline/SKILL.md` (Redirect-Alias auf `agentic-os:research-pipeline`, siehe `wiki/concepts/skill-alias-pattern.md`)
+- **Skills:** `skills/swarm-orchestrator/SKILL.md` (Hauptzugang ueber Skill-Tool)
 - **Beispiel-Konfigurationen:** `examples/`
 - **Scratch Pad / Konsens / Debatten:** `.agent-memory/{scratch,consensus,debates}/` im Zielprojekt
 
@@ -52,7 +52,7 @@ Adversarielle Agent-Teams fuer Claude Code. Statt linearer Sub-Agenten wird ein 
 ## Research-Workflow (Standard)
 Web-Recherche IMMER ueber die Research-Pipeline ausfuehren:
 1. **Perplexity** (Suche + Links) → 2. **NotebookLM** (Ingest + RAG) → 3. **Claude** (liest nur Ergebnis)
-Ergebnisse in `research/<topic>-<date>.md` speichern. Siehe `skills/research-pipeline/SKILL.md`.
+Ergebnisse in `research/<topic>-<date>.md` speichern (Recherche manuell oder per `notebooklm`; der Redirect-Alias auf `agentic-os:research-pipeline` wurde 2026-09-19 entfernt, Skill seit agentic-os 4.0.0 weg).
 
 ## Kosten-Bewusstsein
 - Jeder Subagent verbraucht eigene Tokens — Schwarm von 10 Scannern + 2 Advocates = ~12x Einzelagent
