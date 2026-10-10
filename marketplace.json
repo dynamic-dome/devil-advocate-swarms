@@ -3,7 +3,7 @@
   "name": "devil-advocate-swarms-marketplace",
   "description": "Adversarial agent swarms with Devil's Advocate debate pattern for Claude Code.",
   "owner": {
-    "name": "willneverusegit",
+    "name": "dynamic-dome",
     "email": "noreply@local"
   },
   "plugins": [
@@ -13,7 +13,7 @@
       "category": "development",
       "source": {
         "source": "url",
-        "url": "https://github.com/willneverusegit/devil-advocate-swarms.git"
+        "url": "https://github.com/dynamic-dome/devil-advocate-swarms.git"
       }
     }
   ]
